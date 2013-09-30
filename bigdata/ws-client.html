@@ -1,0 +1,79 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title></title>
+    <script>
+        var host = 'ws://localhost:8090';
+
+        function isString(obj){
+            return Object.prototype.toString.call(obj) == '[object String]';
+        }
+        function getFile(params, callback){
+            var blobs = [];
+            var count = 0;
+            blobs.length = params.thread;
+            var fragments = Math.ceil(params.byteLength/params.thread);
+
+            for(var i = 0;i < params.thread;i ++){
+                (function(index){
+                    var ws = new WebSocket(host);
+                    ws.binaryType = 'blob';
+                    ws.onopen = function(){
+                        ws.send(JSON.stringify({
+                            cmd: 2,
+                            start: fragments * index,
+                            end: fragments * (index+1),
+                            fileName: params.fileName
+                        }));
+                    };
+
+                    ws.onmessage = function(e){
+                        console.log('thread', index, e.data);
+                        blobs[index] = e.data;
+                        count ++;
+                        if ( count == blobs.length ){
+                            setTimeout(function(){
+                                callback(new Blob(blobs));
+                            }, 1);
+                        }
+                        ws.close();
+                    };
+                }(i));
+            }
+        }
+
+        var ws = new WebSocket(host);
+        ws.binaryType = 'blob';
+        ws.onmessage = function(e){
+            console.log(e.data);
+            var message = {};
+            if ( isString(e.data) ){
+                message = JSON.parse(e.data);
+            }
+            ws.close();
+            getFile({
+                thread: 10,
+                fileName: 'ws-client.html',
+                byteLength: message.length
+            }, function(blob){
+
+                var f = new FileReader();
+                f.onload = function(e) {
+                    console.log(f.result);
+                };
+                f.readAsText(blob);
+            });
+        };
+        ws.onopen = function(){
+            ws.send(JSON.stringify({
+                cmd: 1,
+                fileName: 'ws-client.html'
+            }));
+        }
+    </script>
+</head>
+<body>
+
+</body>
+</html>
